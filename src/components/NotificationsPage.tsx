@@ -8,6 +8,10 @@ import {
   Check,
   MoreHorizontal,
   Mail,
+  UserCheck,
+  MessageCircle,
+  X,
+  Smile,
 } from 'lucide-react';
 import { NotificationItem, UserProfile } from '../types';
 
@@ -16,6 +20,9 @@ interface NotificationsPageProps {
   currentUser: UserProfile;
   onMarkAllRead: () => void;
   onSelectUser: (user: UserProfile) => void;
+  onAcceptRequest?: (requestId: string) => void;
+  onDeclineRequest?: (requestId: string) => void;
+  onOpenChatWith?: (user: UserProfile) => void;
 }
 
 export const NotificationsPage: React.FC<NotificationsPageProps> = ({
@@ -23,6 +30,9 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
   currentUser,
   onMarkAllRead,
   onSelectUser,
+  onAcceptRequest,
+  onDeclineRequest,
+  onOpenChatWith,
 }) => {
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
@@ -44,10 +54,15 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
           </div>
         );
       case 'friend_request':
-      case 'friend_accept':
         return (
           <div className="w-5 h-5 rounded-full bg-purple-500 text-white flex items-center justify-center shadow-xs">
             <UserPlus className="w-3 h-3" />
+          </div>
+        );
+      case 'friend_accept':
+        return (
+          <div className="w-5 h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center shadow-xs">
+            <UserCheck className="w-3 h-3" />
           </div>
         );
       case 'message':
@@ -88,7 +103,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#3a3b3c]'
               }`}
             >
-              All
+              All ({notifications.length})
             </button>
             <button
               onClick={() => setFilter('unread')}
@@ -98,7 +113,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
                   : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-[#3a3b3c]'
               }`}
             >
-              Unread
+              Unread ({notifications.filter((n) => !n.read).length})
             </button>
           </div>
         </div>
@@ -120,38 +135,86 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
             return (
               <div
                 key={notif.id}
-                onClick={() => sender && onSelectUser(sender)}
-                className={`p-3.5 sm:p-4 flex items-center gap-3 hover:bg-gray-50 dark:hover:bg-[#3a3b3c] transition-colors cursor-pointer ${
-                  !notif.read ? 'bg-blue-50/50 dark:bg-blue-950/20' : ''
+                className={`p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-[#3a3b3c] transition-colors ${
+                  !notif.read ? 'bg-blue-50/60 dark:bg-blue-950/25' : ''
                 }`}
               >
-                {/* Avatar with small type badge */}
-                <div className="relative shrink-0">
-                  <img
-                    src={sender.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${sender.id}`}
-                    alt={sender.full_name}
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
-                  <div className="absolute -bottom-1 -right-1">{getNotifIcon(notif.type)}</div>
+                <div
+                  onClick={() => sender && onSelectUser(sender)}
+                  className="flex items-start sm:items-center gap-3.5 flex-1 min-w-0 cursor-pointer"
+                >
+                  {/* Avatar with small type badge */}
+                  <div className="relative shrink-0">
+                    <img
+                      src={sender.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${sender.id}`}
+                      alt={sender.full_name}
+                      className="w-12 h-12 rounded-full object-cover border border-gray-200 dark:border-gray-700"
+                    />
+                    <div className="absolute -bottom-1 -right-1">{getNotifIcon(notif.type)}</div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">
+                      <strong className="text-gray-900 dark:text-white font-bold hover:underline">
+                        {sender.full_name}
+                      </strong>{' '}
+                      {notif.content}
+                    </p>
+                    <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1 block">
+                      {formatTimeAgo(notif.created_at)}
+                    </span>
+                  </div>
                 </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-800 dark:text-gray-200 leading-snug">
-                    <strong className="text-gray-900 dark:text-white font-bold">
-                      {sender.full_name}
-                    </strong>{' '}
-                    {notif.content}
-                  </p>
-                  <span className="text-xs text-blue-600 dark:text-blue-400 font-semibold mt-1 block">
-                    {formatTimeAgo(notif.created_at)}
-                  </span>
-                </div>
+                {/* Interactive Action buttons for notifications */}
+                <div className="flex items-center gap-2 pl-14 sm:pl-0 shrink-0">
+                  {notif.type === 'friend_request' && (
+                    <>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onAcceptRequest && notif.reference_id) {
+                            onAcceptRequest(notif.reference_id);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-[#1877F2] hover:bg-blue-600 text-white font-bold text-xs shadow-xs transition-colors flex items-center gap-1 cursor-pointer"
+                      >
+                        <Check className="w-3.5 h-3.5" /> Confirm
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onDeclineRequest && notif.reference_id) {
+                            onDeclineRequest(notif.reference_id);
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-gray-200 dark:bg-[#3a3b3c] hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold text-xs transition-colors cursor-pointer"
+                      >
+                        Delete
+                      </button>
+                    </>
+                  )}
 
-                {/* Unread dot */}
-                {!notif.read && (
-                  <div className="w-3 h-3 rounded-full bg-[#1877F2] shrink-0" />
-                )}
+                  {(notif.type === 'message' || notif.type === 'friend_accept') && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onOpenChatWith && sender) {
+                          onOpenChatWith(sender);
+                        }
+                      }}
+                      className="px-3 py-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-[#1877F2] dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/60 font-bold text-xs border border-blue-200 dark:border-blue-800 transition-colors flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" /> Chat
+                    </button>
+                  )}
+
+                  {/* Unread dot */}
+                  {!notif.read && (
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#1877F2] shrink-0" title="Unread" />
+                  )}
+                </div>
               </div>
             );
           })
@@ -159,7 +222,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({
           <div className="p-8 text-center text-gray-500 dark:text-gray-400">
             <Bell className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-2" />
             <p className="text-base font-bold">No notifications right now</p>
-            <p className="text-xs mt-1">You're all caught up with your StepBook alerts!</p>
+            <p className="text-xs mt-1">When someone sends you a friend request or message, it will show here!</p>
           </div>
         )}
       </div>

@@ -56,7 +56,7 @@ export default function App() {
   const [activeChatPartner, setActiveChatPartner] = useState<UserProfile | null>(null);
   const [chatMessages, setChatMessages] = useState<DirectMessage[]>([]);
 
-  // Modals
+  // Modals & toast
   const [showSqlModal, setShowSqlModal] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -111,7 +111,7 @@ export default function App() {
   const handleLoginSuccess = (user: UserProfile) => {
     setCurrentUser(user);
     localStorage.setItem('stepbook_current_user', JSON.stringify(user));
-    showToast(`Welcome back, ${user.full_name}!`);
+    showToast(`Welcome to StepBook, ${user.full_name}!`);
   };
 
   const handleLogout = async () => {
@@ -199,18 +199,26 @@ export default function App() {
   };
 
   // Friends actions
-  const handleAcceptRequest = (requestId: string) => {
-    setFriendRequests(friendRequests.filter((r) => r.id !== requestId));
-    showToast('Friend request accepted!');
+  const handleAcceptRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    await dataStore.acceptFriendRequest(requestId, currentUser);
+    setFriendRequests((prev) => prev.filter((r) => r.id !== requestId));
+    const notifs = await dataStore.getNotifications(currentUser.id);
+    setNotifications(notifs);
+    showToast('Friend request accepted! You can now chat privately.');
   };
 
-  const handleDeclineRequest = (requestId: string) => {
-    setFriendRequests(friendRequests.filter((r) => r.id !== requestId));
+  const handleDeclineRequest = async (requestId: string) => {
+    if (!currentUser) return;
+    await dataStore.declineFriendRequest(requestId);
+    setFriendRequests((prev) => prev.filter((r) => r.id !== requestId));
     showToast('Friend request removed');
   };
 
-  const handleAddFriend = (userId: string) => {
-    showToast('Friend request sent!');
+  const handleAddFriend = async (userId: string) => {
+    if (!currentUser) return;
+    await dataStore.sendFriendRequest(currentUser.id, userId, currentUser);
+    showToast('Friend request sent! Notification delivered.');
   };
 
   // Profile actions
@@ -224,10 +232,10 @@ export default function App() {
   };
 
   // Messenger actions
-  const handleSendMessage = async (content: string) => {
+  const handleSendMessage = async (content: string, imageUrl?: string) => {
     if (!currentUser || !activeChatPartner) return;
-    const sent = await dataStore.sendMessage(currentUser.id, activeChatPartner.id, content);
-    setChatMessages([...chatMessages, sent]);
+    const sent = await dataStore.sendMessage(currentUser.id, activeChatPartner.id, content, imageUrl, currentUser);
+    setChatMessages((prev) => [...prev, sent]);
   };
 
   const handleSelectUser = (user: UserProfile) => {
@@ -240,7 +248,6 @@ export default function App() {
     if (user) {
       setActiveChatPartner(user);
     } else {
-      // Default to first contact
       const partner = allUsers.find((u) => u.id !== currentUser?.id) || SEED_USERS[1];
       setActiveChatPartner(partner);
     }
@@ -253,12 +260,13 @@ export default function App() {
     showToast('All notifications marked as read');
   };
 
-  // If not logged in, display Facebook Auth Screen
+  // If not logged in, display Facebook Auth Screen (Sign Up / Sign In required)
   if (!currentUser) {
     return <AuthModal onLoginSuccess={handleLoginSuccess} />;
   }
 
   const unreadNotifsCount = notifications.filter((n) => !n.read).length;
+  const friendsList = allUsers.filter((u) => u.id !== currentUser.id && u.id !== 'seed-user-10');
 
   return (
     <div className="min-h-screen bg-[#F0F2F5] dark:bg-[#18191a] text-gray-900 dark:text-gray-100 font-sans antialiased flex flex-col transition-colors duration-200">
@@ -336,6 +344,7 @@ export default function App() {
           {activePage === 'friends' && (
             <FriendsPage
               friendRequests={friendRequests}
+              friendsList={friendsList}
               allUsers={allUsers}
               currentUser={currentUser}
               onAcceptRequest={handleAcceptRequest}
@@ -361,6 +370,9 @@ export default function App() {
               currentUser={currentUser}
               onMarkAllRead={handleMarkAllNotificationsRead}
               onSelectUser={handleSelectUser}
+              onAcceptRequest={handleAcceptRequest}
+              onDeclineRequest={handleDeclineRequest}
+              onOpenChatWith={(u) => setActiveChatPartner(u)}
             />
           )}
 
@@ -370,6 +382,8 @@ export default function App() {
               currentUser={currentUser}
               posts={posts}
               allUsers={allUsers}
+              friendsList={friendsList}
+              friendRequests={friendRequests}
               onUpdateProfile={handleUpdateProfile}
               onCreatePost={handleCreatePost}
               onToggleReaction={handleToggleReaction}
@@ -378,6 +392,9 @@ export default function App() {
               onDeletePost={handleDeletePost}
               onOpenChatWith={(u) => setActiveChatPartner(u)}
               onSelectUser={handleSelectUser}
+              onAddFriend={handleAddFriend}
+              onAcceptRequest={handleAcceptRequest}
+              onDeclineRequest={handleDeclineRequest}
             />
           )}
         </main>
@@ -444,7 +461,7 @@ export default function App() {
         >
           <Bell className="w-5 h-5" />
           {unreadNotifsCount > 0 && (
-            <span className="absolute 0 top-1 right-2 w-2 h-2 rounded-full bg-red-500" />
+            <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-red-500" />
           )}
           <span className="text-[10px] font-bold mt-0.5">Alerts</span>
         </button>
@@ -455,23 +472,29 @@ export default function App() {
             setActivePage('profile');
           }}
           className={`flex flex-col items-center justify-center p-1.5 rounded-xl cursor-pointer ${
-            activePage === 'profile' ? 'text-[#1877F2]' : 'text-gray-500 dark:text-gray-400'
+            activePage === 'profile' && viewingUser?.id === currentUser.id
+              ? 'text-[#1877F2]'
+              : 'text-gray-500 dark:text-gray-400'
           }`}
         >
-          <UserIcon className="w-5 h-5" />
+          <img
+            src={
+              currentUser.avatar_url ||
+              `https://api.dicebear.com/7.x/avataaars/svg?seed=${currentUser.id}`
+            }
+            alt="Profile"
+            className="w-5 h-5 rounded-full object-cover border border-gray-300 dark:border-gray-600"
+          />
           <span className="text-[10px] font-bold mt-0.5">Profile</span>
         </button>
       </nav>
 
-      {/* Supabase SQL Helper Modal */}
-      <SqlSchemaModal
-        isOpen={showSqlModal}
-        onClose={() => setShowSqlModal(false)}
-      />
+      {/* SQL Schema Modal for Supabase inspection */}
+      {showSqlModal && <SqlSchemaModal onClose={() => setShowSqlModal(false)} />}
 
-      {/* Floating Toast Notification */}
+      {/* Toast popup */}
       {toastMessage && (
-        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-gray-900 text-white dark:bg-white dark:text-gray-900 px-4 py-2.5 rounded-full shadow-2xl text-xs sm:text-sm font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2 duration-150">
+        <div className="fixed bottom-16 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-xl bg-gray-900/90 text-white text-xs sm:text-sm font-semibold shadow-2xl backdrop-blur-xs flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
           <span>{toastMessage}</span>
         </div>
       )}

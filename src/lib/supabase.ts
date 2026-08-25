@@ -456,6 +456,28 @@ export const dataStore = {
     const posts = getCache<PostItem[]>(STORAGE_KEYS.POSTS, SEED_POSTS);
     posts.unshift(postObj);
     setCache(STORAGE_KEYS.POSTS, posts);
+
+    // If it's a public post, send a notification to friends/active users
+    if (postObj.privacy === 'public' && newPost.user) {
+      const allProfiles = getCache<UserProfile[]>(STORAGE_KEYS.PROFILES, SEED_USERS);
+      const otherUsers = allProfiles.filter((u) => u.id !== postObj.user_id);
+      
+      // Notify other active community members
+      otherUsers.slice(0, 3).forEach((u) => {
+        this.addNotification({
+          id: 'notif_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+          user_id: u.id,
+          type: 'mention',
+          from_user_id: postObj.user_id,
+          content: `shared a new public post: "${(postObj.content || 'Photo update').slice(0, 30)}..."`,
+          read: false,
+          created_at: new Date().toISOString(),
+          from_user: postObj.user,
+          reference_id: postObj.id,
+        });
+      });
+    }
+
     return postObj;
   },
 
@@ -783,12 +805,29 @@ export const dataStore = {
     return profiles.filter((p) => friendIds.includes(p.id));
   },
 
-  async sendFriendRequest(sender: UserProfile, targetUserId: string, targetUser?: UserProfile): Promise<{ success: boolean; friendship: FriendShip }> {
+  async sendFriendRequest(
+    param1: UserProfile | string,
+    param2: string | UserProfile,
+    param3?: UserProfile
+  ): Promise<{ success: boolean; friendship: FriendShip }> {
+    const senderId = typeof param1 === 'string' ? param1 : param1.id;
+    const targetUserId = typeof param2 === 'string' ? param2 : param2.id;
+    const senderProfile =
+      typeof param1 === 'object'
+        ? param1
+        : param3 || (await this.getProfile(senderId)) || {
+            id: senderId,
+            full_name: 'StepBook User',
+            email: 'user@example.com',
+            avatar_url: `https://api.dicebear.com/7.x/avataaars/svg?seed=${senderId}`,
+            created_at: new Date().toISOString(),
+          };
+
     const all = await this.getAllFriendships();
     const existing = all.find(
       (f) =>
-        (f.user_id === sender.id && f.friend_id === targetUserId) ||
-        (f.user_id === targetUserId && f.friend_id === sender.id)
+        (f.user_id === senderId && f.friend_id === targetUserId) ||
+        (f.user_id === targetUserId && f.friend_id === senderId)
     );
 
     if (existing) {
@@ -797,11 +836,11 @@ export const dataStore = {
 
     const newReq: FriendShip = {
       id: 'req_' + Date.now(),
-      user_id: sender.id,
+      user_id: senderId,
       friend_id: targetUserId,
       status: 'pending',
       created_at: new Date().toISOString(),
-      friend_profile: sender,
+      friend_profile: senderProfile,
       mutual_count: Math.floor(Math.random() * 8) + 1,
     };
 
@@ -813,11 +852,11 @@ export const dataStore = {
       id: 'notif_' + Date.now(),
       user_id: targetUserId,
       type: 'friend_request',
-      from_user_id: sender.id,
+      from_user_id: senderId,
       content: 'sent you a friend request.',
       read: false,
       created_at: new Date().toISOString(),
-      from_user: sender,
+      from_user: senderProfile,
       reference_id: newReq.id,
     });
 

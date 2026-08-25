@@ -21,6 +21,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { UserProfile, ActivePage, NotificationItem } from '../types';
+import { MessengerDropdown } from './MessengerDropdown';
 
 interface HeaderProps {
   currentUser: UserProfile;
@@ -34,6 +35,7 @@ interface HeaderProps {
   onOpenMessenger: (user?: UserProfile) => void;
   onLogout: () => void;
   onSelectUser: (user: UserProfile) => void;
+  onSwitchUser?: (user: UserProfile) => void;
   allUsers: UserProfile[];
 }
 
@@ -49,16 +51,19 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenMessenger,
   onLogout,
   onSelectUser,
+  onSwitchUser,
   allUsers,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearchDropdown, setShowSearchDropdown] = useState(false);
   const [showMobileSearch, setShowMobileSearch] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showMessengerDropdown, setShowMessengerDropdown] = useState(false);
   const searchRef = useRef<HTMLDivElement>(null);
   const mobileSearchRef = useRef<HTMLDivElement>(null);
   const mobileInputRef = useRef<HTMLInputElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
+  const messengerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -70,6 +75,9 @@ export const Header: React.FC<HeaderProps> = ({
       }
       if (profileMenuRef.current && !profileMenuRef.current.contains(e.target as Node)) {
         setShowProfileMenu(false);
+      }
+      if (messengerRef.current && !messengerRef.current.contains(e.target as Node)) {
+        setShowMessengerDropdown(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -353,20 +361,41 @@ export const Header: React.FC<HeaderProps> = ({
           {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-amber-400" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5" />}
         </button>
 
-        {/* Messenger Button */}
-        <button
-          id="btn-open-messenger"
-          title="Messenger"
-          onClick={() => onOpenMessenger()}
-          className="relative w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 dark:bg-[#3a3b3c] hover:bg-gray-200 dark:hover:bg-[#4e4f50] flex items-center justify-center text-gray-700 dark:text-gray-200 transition-colors cursor-pointer shrink-0"
-        >
-          <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
-          {unreadMsgsCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-white dark:border-[#242526]">
-              {unreadMsgsCount}
-            </span>
+        {/* Messenger Button & Dropdown */}
+        <div ref={messengerRef} className="relative shrink-0">
+          <button
+            id="btn-open-messenger"
+            title="Messenger (Chats)"
+            onClick={() => {
+              setShowMessengerDropdown(!showMessengerDropdown);
+              setShowProfileMenu(false);
+            }}
+            className={`relative w-9 h-9 sm:w-10 sm:h-10 rounded-full transition-colors cursor-pointer shrink-0 flex items-center justify-center ${
+              showMessengerDropdown
+                ? 'bg-blue-100 text-[#1877F2] dark:bg-blue-900/40 dark:text-[#2d88ff]'
+                : 'bg-gray-100 dark:bg-[#3a3b3c] hover:bg-gray-200 dark:hover:bg-[#4e4f50] text-gray-700 dark:text-gray-200'
+            }`}
+          >
+            <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+            {unreadMsgsCount > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[16px] text-center border-2 border-white dark:border-[#242526]">
+                {unreadMsgsCount}
+              </span>
+            )}
+          </button>
+
+          {showMessengerDropdown && (
+            <MessengerDropdown
+              currentUser={currentUser}
+              allUsers={allUsers}
+              onSelectChatPartner={(partner) => {
+                onOpenMessenger(partner);
+                setShowMessengerDropdown(false);
+              }}
+              onClose={() => setShowMessengerDropdown(false)}
+            />
           )}
-        </button>
+        </div>
 
         {/* Notifications Button (hidden on sm if bottom bar exists, but accessible) */}
         <button
@@ -428,6 +457,45 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <div className="h-px bg-gray-200 dark:bg-[#393a3b] my-2" />
+
+              {/* Switch Account (Easy testing between profiles) */}
+              {onSwitchUser && allUsers.filter((u) => u.id !== currentUser.id).length > 0 && (
+                <div className="mb-2">
+                  <div className="px-2 py-1 text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Switch Account (Testing)
+                  </div>
+                  <div className="space-y-1 mt-1 max-h-36 overflow-y-auto">
+                    {allUsers
+                      .filter((u) => u.id !== currentUser.id)
+                      .slice(0, 4)
+                      .map((u) => (
+                        <button
+                          key={u.id}
+                          onClick={() => {
+                            onSwitchUser(u);
+                            setShowProfileMenu(false);
+                          }}
+                          className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-blue-50 dark:hover:bg-blue-950/30 text-left transition-colors cursor-pointer group"
+                        >
+                          <img
+                            src={u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`}
+                            alt={u.full_name}
+                            className="w-7 h-7 rounded-full object-cover border border-gray-200 dark:border-gray-700 group-hover:border-blue-500"
+                          />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-gray-800 dark:text-gray-200 truncate group-hover:text-blue-600 dark:group-hover:text-blue-400">
+                              {u.full_name}
+                            </div>
+                          </div>
+                          <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                            Switch
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                  <div className="h-px bg-gray-200 dark:bg-[#393a3b] my-2" />
+                </div>
+              )}
 
               <button
                 onClick={() => {

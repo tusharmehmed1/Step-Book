@@ -103,6 +103,22 @@ export default function App() {
     }
   }, [currentUser, activeChatPartner]);
 
+  // Periodic sync for posts, notifications & requests
+  useEffect(() => {
+    if (!currentUser) return;
+    const interval = setInterval(async () => {
+      const [fetchedPosts, notifs, reqs] = await Promise.all([
+        dataStore.getPosts(),
+        dataStore.getNotifications(currentUser.id),
+        dataStore.getFriendRequests(currentUser.id),
+      ]);
+      setPosts(fetchedPosts);
+      setNotifications(notifs);
+      setFriendRequests(reqs);
+    }, 3500);
+    return () => clearInterval(interval);
+  }, [currentUser]);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -112,6 +128,13 @@ export default function App() {
     setCurrentUser(user);
     localStorage.setItem('stepbook_current_user', JSON.stringify(user));
     showToast(`Welcome to StepBook, ${user.full_name}!`);
+  };
+
+  const handleSwitchUser = (user: UserProfile) => {
+    setCurrentUser(user);
+    localStorage.setItem('stepbook_current_user', JSON.stringify(user));
+    setActiveChatPartner(null);
+    showToast(`Switched account to ${user.full_name}`);
   };
 
   const handleLogout = async () => {
@@ -140,9 +163,43 @@ export default function App() {
       ...newPostData,
       user_id: currentUser.id,
       user: currentUser,
+      privacy: newPostData.privacy || 'public',
     });
     setPosts([created, ...posts]);
-    showToast('Post published successfully!');
+    showToast('Post published publicly! All users can view, like, and comment.');
+
+    // If public post, community members interact after a short delay
+    if ((newPostData.privacy || 'public') === 'public') {
+      setTimeout(async () => {
+        const reactor = allUsers.find((u) => u.id !== currentUser.id && u.id.startsWith('seed-user')) || allUsers[1];
+        if (reactor) {
+          const updated = await dataStore.toggleReaction(created.id, reactor.id, 'love', reactor);
+          if (updated) {
+            setPosts((prev) => prev.map((p) => (p.id === created.id ? { ...updated } : p)));
+            const freshNotifs = await dataStore.getNotifications(currentUser.id);
+            setNotifications(freshNotifs);
+          }
+        }
+      }, 3500);
+
+      setTimeout(async () => {
+        const commenter = allUsers.find((u) => u.id !== currentUser.id && u.id.includes('user-3')) || allUsers[2];
+        if (commenter) {
+          const comments = [
+            'Awesome post! Love seeing your updates on StepBook 🙌',
+            'Looks fantastic! Great vibe 🌟',
+            'So nice! Have a wonderful day 😊',
+          ];
+          const text = comments[Math.floor(Math.random() * comments.length)];
+          const updated = await dataStore.addComment(created.id, commenter.id, text, commenter);
+          if (updated) {
+            setPosts((prev) => prev.map((p) => (p.id === created.id ? { ...updated } : p)));
+            const freshNotifs = await dataStore.getNotifications(currentUser.id);
+            setNotifications(freshNotifs);
+          }
+        }
+      }, 6000);
+    }
   };
 
   const handleToggleReaction = async (postId: string, reactionType: ReactionType) => {
@@ -219,6 +276,24 @@ export default function App() {
     if (!currentUser) return;
     await dataStore.sendFriendRequest(currentUser.id, userId, currentUser);
     showToast('Friend request sent! Notification delivered.');
+
+    // If target user is a seed user, simulate them accepting after 3 seconds so the user gets notified
+    const isSeed = userId.startsWith('seed-user');
+    if (isSeed) {
+      setTimeout(async () => {
+        const targetProfile = allUsers.find((u) => u.id === userId);
+        if (targetProfile) {
+          const reqs = await dataStore.getFriendRequests(userId);
+          const matched = reqs.find((r) => r.user_id === currentUser.id);
+          if (matched) {
+            await dataStore.acceptFriendRequest(matched.id, targetProfile);
+            const freshNotifs = await dataStore.getNotifications(currentUser.id);
+            setNotifications(freshNotifs);
+            showToast(`🎉 ${targetProfile.full_name} accepted your friend request!`);
+          }
+        }
+      }, 3200);
+    }
   };
 
   // Profile actions
@@ -236,6 +311,29 @@ export default function App() {
     if (!currentUser || !activeChatPartner) return;
     const sent = await dataStore.sendMessage(currentUser.id, activeChatPartner.id, content, imageUrl, currentUser);
     setChatMessages((prev) => [...prev, sent]);
+
+    // If chatting with a contact, simulate interactive reply after 1.5 seconds
+    const partner = activeChatPartner;
+    const isSeed = partner.id.startsWith('seed-user');
+    if (isSeed) {
+      setTimeout(async () => {
+        const replies = [
+          `Hey ${currentUser.full_name.split(' ')[0]}! Great to hear from you 😊`,
+          `Thanks for reaching out! How is your day going? 🌟`,
+          `Awesome! Loved checking out your posts on StepBook 👍`,
+          `Let's definitely catch up soon! ☕`,
+          `Got your message! Hope you're having a wonderful time 🚀`,
+        ];
+        const randomReply = replies[Math.floor(Math.random() * replies.length)];
+        const replyMsg = await dataStore.sendMessage(partner.id, currentUser.id, randomReply, undefined, partner);
+        setChatMessages((prev) => {
+          if (activeChatPartner?.id === partner.id) {
+            return [...prev, replyMsg];
+          }
+          return prev;
+        });
+      }, 1600);
+    }
   };
 
   const handleSelectUser = (user: UserProfile) => {
@@ -286,6 +384,7 @@ export default function App() {
         onOpenMessenger={handleOpenMessenger}
         onLogout={handleLogout}
         onSelectUser={handleSelectUser}
+        onSwitchUser={handleSwitchUser}
         allUsers={allUsers}
       />
 
@@ -418,6 +517,8 @@ export default function App() {
           messages={chatMessages}
           onSendMessage={handleSendMessage}
           onClose={() => setActiveChatPartner(null)}
+          allUsers={allUsers}
+          onSwitchPartner={(partner) => setActiveChatPartner(partner)}
         />
       )}
 

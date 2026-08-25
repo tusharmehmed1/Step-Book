@@ -12,6 +12,9 @@ import {
   Info,
   CheckCheck,
   Sparkles,
+  Users,
+  ChevronDown,
+  Search,
 } from 'lucide-react';
 import { DirectMessage, UserProfile } from '../types';
 
@@ -21,6 +24,8 @@ interface FloatingChatProps {
   messages: DirectMessage[];
   onSendMessage: (content: string, imageUrl?: string) => Promise<void>;
   onClose: () => void;
+  allUsers?: UserProfile[];
+  onSwitchPartner?: (user: UserProfile) => void;
 }
 
 const QUICK_PROMPTS = ['👋 Hello!', 'How are you doing?', 'Are you free today?', 'Let’s catch up! ☕', '👍 Sounds good!'];
@@ -31,14 +36,29 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
   messages,
   onSendMessage,
   onClose,
+  allUsers = [],
+  onSwitchPartner,
 }) => {
   const [isMinimized, setIsMinimized] = useState(false);
+  const [showUserSwitcher, setShowUserSwitcher] = useState(false);
+  const [switchSearch, setSwitchSearch] = useState('');
   const [text, setText] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [callNotice, setCallNotice] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const switcherRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (switcherRef.current && !switcherRef.current.contains(e.target as Node)) {
+        setShowUserSwitcher(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (!isMinimized) {
@@ -113,29 +133,104 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
   return (
     <div className="fixed bottom-14 sm:bottom-0 right-2 sm:right-16 z-50 w-[calc(100vw-1rem)] sm:w-92 max-w-[370px] h-[440px] sm:h-[480px] bg-white dark:bg-[#242526] rounded-2xl sm:rounded-t-2xl shadow-2xl border border-gray-200 dark:border-[#393a3b] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-150">
       {/* Messenger Header */}
-      <div className="p-2.5 px-3 bg-white dark:bg-[#242526] border-b border-gray-200 dark:border-[#393a3b] flex items-center justify-between shadow-xs">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="relative shrink-0">
-            <img
-              src={partner.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner.id}`}
-              alt={partner.full_name}
-              className="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border border-white dark:border-[#242526] rounded-full" />
-          </div>
-          <div className="min-w-0">
-            <h4 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
-              <span>{partner.full_name}</span>
-            </h4>
-            <div className="text-[10px] text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span>Active on StepBook</span>
+      <div className="p-2.5 px-3 bg-white dark:bg-[#242526] border-b border-gray-200 dark:border-[#393a3b] flex items-center justify-between shadow-xs relative">
+        <div ref={switcherRef} className="relative min-w-0 flex-1 mr-2">
+          <button
+            onClick={() => setShowUserSwitcher(!showUserSwitcher)}
+            className="flex items-center gap-2 min-w-0 text-left hover:bg-gray-100 dark:hover:bg-[#3a3b3c] p-1 rounded-xl transition-colors cursor-pointer w-full group"
+            title="Click to switch conversation or view all friends"
+          >
+            <div className="relative shrink-0">
+              <img
+                src={partner.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${partner.id}`}
+                alt={partner.full_name}
+                className="w-9 h-9 rounded-full object-cover border border-gray-200 dark:border-gray-700 group-hover:border-blue-500"
+              />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-green-500 border border-white dark:border-[#242526] rounded-full" />
             </div>
-          </div>
+            <div className="min-w-0 flex-1">
+              <h4 className="text-sm font-bold text-gray-900 dark:text-white truncate flex items-center gap-1">
+                <span>{partner.full_name}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-hover:text-blue-500 transition-transform" />
+              </h4>
+              <div className="text-[10px] text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                <span>Active now • Tap to switch</span>
+              </div>
+            </div>
+          </button>
+
+          {/* Quick contact switcher popover inside Floating Chat */}
+          {showUserSwitcher && allUsers.length > 0 && onSwitchPartner && (
+            <div className="absolute left-0 top-12 w-68 sm:w-72 bg-white dark:bg-[#242526] rounded-2xl shadow-2xl border border-gray-200 dark:border-[#393a3b] p-2 z-50 animate-in fade-in zoom-in-95 duration-150 max-h-72 flex flex-col">
+              <div className="px-2 py-1 flex items-center justify-between border-b border-gray-100 dark:border-[#393a3b] pb-2 mb-1">
+                <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Switch Friend to SMS
+                </span>
+                <span className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">
+                  {allUsers.filter((u) => u.id !== currentUser.id).length} contacts
+                </span>
+              </div>
+
+              <div className="relative px-1 mb-1">
+                <input
+                  type="text"
+                  placeholder="Search contact..."
+                  value={switchSearch}
+                  onChange={(e) => setSwitchSearch(e.target.value)}
+                  className="w-full bg-[#F0F2F5] dark:bg-[#3a3b3c] rounded-lg px-2.5 py-1 text-xs text-gray-900 dark:text-gray-100 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="overflow-y-auto space-y-1 flex-1">
+                {allUsers
+                  .filter(
+                    (u) =>
+                      u.id !== currentUser.id &&
+                      u.full_name.toLowerCase().includes(switchSearch.toLowerCase().trim())
+                  )
+                  .map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        onSwitchPartner(u);
+                        setShowUserSwitcher(false);
+                        setSwitchSearch('');
+                      }}
+                      className={`w-full flex items-center gap-2.5 p-2 rounded-xl text-left transition-colors cursor-pointer ${
+                        u.id === partner.id
+                          ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400'
+                          : 'hover:bg-gray-100 dark:hover:bg-[#3a3b3c] text-gray-800 dark:text-gray-200'
+                      }`}
+                    >
+                      <div className="relative shrink-0">
+                        <img
+                          src={u.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${u.id}`}
+                          alt={u.full_name}
+                          className="w-7 h-7 rounded-full object-cover"
+                        />
+                        <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 border border-white dark:border-[#242526] rounded-full" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs font-semibold truncate">{u.full_name}</div>
+                        <div className="text-[10px] text-gray-400 truncate">
+                          {u.location || 'Active on StepBook'}
+                        </div>
+                      </div>
+                      {u.id === partner.id && (
+                        <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400">
+                          Active
+                        </span>
+                      )}
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-0.5 text-[#1877F2]">
+        <div className="flex items-center gap-0.5 text-[#1877F2] shrink-0">
           <button
             onClick={() => handleStartCall('audio')}
             title="Start voice call"

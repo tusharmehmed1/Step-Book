@@ -1,0 +1,6 @@
+{
+  "name": "StepBook",
+  "description": "A Facebook-styled social networking application with feeds, stories, reactions, comments, messaging, groups, friend connections, and user profiles.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

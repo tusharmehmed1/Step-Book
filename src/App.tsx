@@ -32,9 +32,9 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(() => {
     try {
       const stored = localStorage.getItem('stepbook_current_user');
-      return stored ? JSON.parse(stored) : SEED_USERS[0];
+      return stored ? JSON.parse(stored) : null;
     } catch {
-      return SEED_USERS[0];
+      return null;
     }
   });
 

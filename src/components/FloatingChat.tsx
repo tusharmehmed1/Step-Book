@@ -77,7 +77,7 @@ export const FloatingChat: React.FC<FloatingChatProps> = ({
   }
 
   return (
-    <div className="fixed bottom-0 right-4 sm:right-16 z-50 w-80 sm:w-88 h-96 bg-white dark:bg-[#242526] rounded-t-2xl shadow-2xl border border-gray-200 dark:border-[#393a3b] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-150">
+    <div className="fixed bottom-14 sm:bottom-0 right-2 sm:right-16 z-50 w-[calc(100vw-1rem)] sm:w-88 max-w-[360px] h-[380px] sm:h-96 bg-white dark:bg-[#242526] rounded-2xl sm:rounded-t-2xl shadow-2xl border border-gray-200 dark:border-[#393a3b] flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 duration-150">
       {/* Messenger Header */}
       <div className="p-2.5 px-3 bg-white dark:bg-[#242526] border-b border-gray-200 dark:border-[#393a3b] flex items-center justify-between shadow-xs">
         <div className="flex items-center gap-2.5 min-w-0">
